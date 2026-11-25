@@ -7,6 +7,7 @@ import Alerts from '@/pages/Alerts'
 import Parking from '@/pages/Parking'
 import AiInsights from '@/pages/AiInsights'
 import Cameras from '@/pages/Cameras'
+import OutsideFood from '@/pages/OutsideFood'
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="waiting-time" element={<WaitingTime />} />
           <Route path="alert" element={<Alerts />} />
           <Route path="parkir" element={<Parking />} />
+          <Route path="makanan-luar" element={<OutsideFood />} />
           <Route path="ai-insight" element={<AiInsights />} />
           <Route path="kamera" element={<Cameras />} />
         </Route>

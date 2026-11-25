@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   Menu,
   Moon,
+  PackageX,
   ScanEye,
   Sparkles,
   Sun,
@@ -23,6 +24,7 @@ const nav = [
   { to: '/waiting-time', label: 'Waiting Time', icon: Clock },
   { to: '/alert', label: 'Alert', icon: Bell, badge: alerts.filter((a) => !a.resolved).length },
   { to: '/parkir', label: 'Parkiran', icon: Car },
+  { to: '/makanan-luar', label: 'Makanan Luar', icon: PackageX },
   { to: '/ai-insight', label: 'AI Insight', icon: Sparkles },
   { to: '/kamera', label: 'Kamera', icon: Camera },
 ]
@@ -33,6 +35,7 @@ const titles: Record<string, string> = {
   '/waiting-time': 'Waiting Time Pesanan',
   '/alert': 'Pusat Alert',
   '/parkir': 'Monitoring Parkiran',
+  '/makanan-luar': 'Makanan & Minuman dari Luar',
   '/ai-insight': 'AI Insight & Rekomendasi',
   '/kamera': 'Kamera CCTV',
 }
