@@ -13,6 +13,11 @@ Fitur waiting time:
   GET  /api/waiting                     sesi aktif, riwayat, alert, statistik
   POST /api/sessions/{id}/confirm       waiter menandai pesanan sudah lengkap
   WS   /ws/waiting                      snapshot waiting tiap 1 detik
+
+Fitur makanan/minuman dari luar:
+  GET  /api/outside-food                alert aktif, riwayat, aturan, statistik
+  POST /api/outside-food/{id}/resolve   staf menandai alert sudah ditangani
+  WS   /ws/outside-food                 snapshot tiap 1 detik
 """
 
 from __future__ import annotations
@@ -108,6 +113,25 @@ def confirm(session_id: str):
 @app.websocket("/ws/waiting")
 async def ws_waiting(ws: WebSocket):
     await _push(ws, hub.waiting_snapshot)
+
+
+# --------------------------------------------- fitur: makanan/minuman dari luar
+@app.get("/api/outside-food")
+def get_outside_food():
+    return hub.outside_snapshot()
+
+
+@app.post("/api/outside-food/{alert_id}/resolve")
+def resolve_outside_food(alert_id: str):
+    a = hub.resolve_outside(alert_id)
+    if a is None:
+        raise HTTPException(404, "Alert tidak ditemukan atau sudah selesai")
+    return a
+
+
+@app.websocket("/ws/outside-food")
+async def ws_outside_food(ws: WebSocket):
+    await _push(ws, hub.outside_snapshot)
 
 
 def cli() -> None:
