@@ -8,3 +8,6 @@ numpy
 opencv-python
 pytest
 httpx
+python-dotenv
+# Opsional: ringkasan LLM di AI Insight (tanpa paket/API key tetap jalan rule-based)
+anthropic

@@ -18,6 +18,10 @@ Fitur makanan/minuman dari luar:
   GET  /api/outside-food                alert aktif, riwayat, aturan, statistik
   POST /api/outside-food/{id}/resolve   staf menandai alert sudah ditangani
   WS   /ws/outside-food                 snapshot tiap 1 detik
+
+Saran tindakan AI (rule-based + ringkasan LLM opsional):
+  GET  /api/recommendations             saran terurut prioritas, ringkasan, sumber data
+  WS   /ws/recommendations              snapshot tiap 1 detik
 """
 
 from __future__ import annotations
@@ -132,6 +136,17 @@ def resolve_outside_food(alert_id: str):
 @app.websocket("/ws/outside-food")
 async def ws_outside_food(ws: WebSocket):
     await _push(ws, hub.outside_snapshot)
+
+
+# ------------------------------------------------- fitur: saran tindakan AI
+@app.get("/api/recommendations")
+def get_recommendations():
+    return hub.recommendations_snapshot()
+
+
+@app.websocket("/ws/recommendations")
+async def ws_recommendations(ws: WebSocket):
+    await _push(ws, hub.recommendations_snapshot)
 
 
 def cli() -> None:

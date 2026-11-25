@@ -43,6 +43,15 @@
       "cooldown_s": 300,
       "require_occupied": true,
       "ignore_kinds": []
+    },
+    "recommendations": {
+      "leftover_min": 5,
+      "waiting_no_item_min": 20,
+      "waiting_partial_min": 25,
+      "reservation_lead_min": 15,
+      "long_stay_min": 90,
+      "busy_occupancy": 0.85,
+      "llm_enabled": true
     }
   },
   "tables": [
