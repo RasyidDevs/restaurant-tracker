@@ -1,0 +1,10 @@
+# ByteTrack dengan buffer lebih panjang supaya ID orang tidak cepat berganti
+# saat tertutup waiter/orang lain. track_buffer dihitung dalam frame yang diproses
+# (75 frame pada 5 fps = 15 detik).
+tracker_type: bytetrack
+track_high_thresh: 0.25
+track_low_thresh: 0.1
+new_track_thresh: 0.25
+track_buffer: 75
+match_thresh: 0.8
+fuse_score: True

@@ -1,0 +1,53 @@
+{
+  "source": "simulate",
+  "model": "yolov8s-worldv2.pt",
+  "device": "0",
+  "conf": 0.35,
+  "imgsz": 960,
+  "process_fps": 5,
+  "realtime_playback": true,
+  "loop_video": false,
+  "sim_speed": 10,
+  "classes": {
+    "person": ["person"],
+    "plate": ["plate", "bowl"],
+    "glass": ["drinking glass", "cup", "wine glass"],
+    "chair": ["chair", "couch", "bench"],
+    "table": ["dining table"],
+    "car": ["car", "truck"],
+    "motorcycle": ["motorcycle", "bicycle"]
+  },
+  "core": {
+    "seated_min_s": 30,
+    "lost_grace_s": 15,
+    "count_window_s": 3,
+    "count_hold_s": 3
+  },
+  "features": {
+    "waiting_time": {
+      "empty_grace_s": 120,
+      "require_drinks": true,
+      "alert_no_item_min": 20,
+      "alert_partial_min": 25,
+      "target_min": 20
+    }
+  },
+  "tables": [
+    {
+      "id": "T1",
+      "name": "Meja 1",
+      "seats": 4,
+      "zone": [[100, 200], [600, 200], [600, 700], [100, 700]],
+      "surface": [[200, 320], [500, 320], [500, 560], [200, 560]],
+      "chairs": [[120, 330, 200, 520], [500, 330, 580, 520], [260, 220, 440, 320], [260, 560, 440, 680]]
+    },
+    {
+      "id": "T2",
+      "name": "Meja 2",
+      "seats": 4,
+      "zone": [[680, 200], [1180, 200], [1180, 700], [680, 700]],
+      "surface": [[780, 320], [1080, 320], [1080, 560], [780, 560]],
+      "chairs": [[700, 330, 780, 520], [1080, 330, 1160, 520], [840, 220, 1020, 320], [840, 560, 1020, 680]]
+    }
+  ]
+}
