@@ -59,6 +59,21 @@ Metrik: waktu sampai minuman pertama, makanan pertama, dan lengkap.
 
 > Karena START = saat duduk, waiting time **sudah termasuk waktu baca menu dan memesan**. Kalau nanti ada data kasir, cukup ganti START ke waktu pesanan.
 
+## Fitur: okupansi meja (`features/table_occupancy.py`)
+
+Jumlah orang per meja, lama duduk, dan estimasi kapan meja kosong.
+
+| Bagian | Cara hitung |
+|---|---|
+| Jumlah orang | `table.people` dari core (sudah disaring dari waiter/orang lewat), plus `seats_free` dan okupansi kursi total |
+| Lama duduk | kunjungan mulai = orang pertama terlihat, selesai = orang terakhir terlihat. Kunjungan < 60 dtk tidak dihitung |
+| Fase makan | `menunggu_makanan`, lalu `makan` (piring baru datang), lalu `selesai_makan` (piring baru turun ke ≤ separuh puncak) |
+| Estimasi kosong | menunggu makanan: sisa tunggu + durasi setelah makanan datang. Makan: durasi setelah makanan datang dikurangi lama makan. Selesai makan: `after_meal_min` dikurangi sejak piring diangkat |
+
+- Durasi "tunggu makanan" dan "setelah makanan datang" **dipelajari** dari median riwayat kunjungan setelah `learn_min_visits` kunjungan. Sebelum itu dipakai default.
+- Sebagian rombongan pergi membuat estimasi dikali 0,7. Melewati perkiraan menurunkan confidence.
+- Status meja: `kosong`, `terisi`, `segera_kosong` (estimasi ≤ `soon_free_min`), atau `perlu_dibersihkan` (kosong tapi masih ada piring/gelas).
+
 ## Menjalankan
 
 ```bash
@@ -101,9 +116,10 @@ Kecepatan terukur: YOLO11s ±57 ms/frame di RTX 4050 (±17 fps), sedangkan pipel
 | `GET /api/stream.mjpg` | video beranotasi (zona, kursi, deteksi, timer) |
 | `GET /api/waiting`, `WS /ws/waiting` | waiting time: sesi aktif, riwayat, alert, statistik |
 | `POST /api/sessions/{id}/confirm` | waiter menandai sudah lengkap |
+| `GET /api/occupancy`, `WS /ws/occupancy` | okupansi meja: orang, lama duduk, estimasi kosong, distribusi lama duduk |
 
 ### Tes
-`.venv\Scripts\python -m pytest -q tests`. Isinya `test_core.py` (penghalus, dwell, zona, kursi, status meja, clustering layout) dan `test_waiting_time.py` (8 skenario waiting time).
+`.venv\Scripts\python -m pytest -q tests`. Isinya `test_core.py` (penghalus, dwell, zona, kursi, status meja, clustering layout) `test_waiting_time.py` (8 skenario waiting time), dan `test_table_occupancy.py` (okupansi, lama duduk, estimasi kosong).
 
 ## Model: kelas `plate`
 
@@ -117,3 +133,4 @@ YOLO COCO bawaan **tidak punya kelas `plate`**. Sementara dipakai `bowl`, sedang
 
 `core`: `seated_min_s` (30), `lost_grace_s` (15), `count_window_s` / `count_hold_s` (3/3)
 `features.waiting_time`: `empty_grace_s` (120), `require_drinks` (true), `alert_no_item_min` (20), `alert_partial_min` (25), `target_min` (20)
+`features.table_occupancy`: `default_food_wait_min` (15), `default_post_food_min` (35), `after_meal_min` (10), `soon_free_min` (10), `min_visit_s` (60), `learn_min_visits` (3)

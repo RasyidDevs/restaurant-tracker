@@ -30,6 +30,14 @@
       "alert_no_item_min": 20,
       "alert_partial_min": 25,
       "target_min": 20
+    },
+    "table_occupancy": {
+      "default_food_wait_min": 15,
+      "default_post_food_min": 35,
+      "after_meal_min": 10,
+      "soon_free_min": 10,
+      "min_visit_s": 60,
+      "learn_min_visits": 3
     }
   },
   "tables": [
