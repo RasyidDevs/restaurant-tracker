@@ -145,3 +145,45 @@ def test_mock_providers_are_labelled_and_deterministic():
     first = park.parking(NOW)
     later = park.parking(NOW + 600)
     assert later[0].duration_min == pytest.approx(first[0].duration_min + 10)
+
+
+def test_llm_path_with_fake_client(monkeypatch):
+    """Jalur LLM tanpa jaringan: client palsu, cek kwargs, cache, dan refusal tidak merusak."""
+    import threading
+    from types import SimpleNamespace
+
+    calls = []
+
+    class FakeMessages:
+        def __init__(self, stop_reason="end_turn"):
+            self.stop_reason = stop_reason
+
+        def create(self, **kw):
+            calls.append(kw)
+            return SimpleNamespace(stop_reason=self.stop_reason, content=[SimpleNamespace(type="text", text=" Ringkasan. ")])
+
+    monkeypatch.setattr("app.features.recommendations.llm._load_env", lambda: None)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    llm = LLMSummarizer()
+    llm._client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()), messages=FakeMessages())
+    llm._sdk = SimpleNamespace(AuthenticationError=type("FakeAuthError", (Exception,), {}))
+
+    def wait():
+        for th in threading.enumerate():
+            if th.name == "llm-summary":
+                th.join(10)
+
+    s = sig(tables=[table("T1", plates=2, empty_min=7)])
+    recs = generate(s, R)
+    assert llm.summary(s, recs) is None  # panggilan pertama jalan di latar
+    wait()
+    assert llm.summary(s, recs) == "Ringkasan."
+    assert len(calls) == 1  # daftar saran sama & masih dalam MIN_GAP -> tidak memanggil lagi
+    assert calls[0]["model"] == "claude-opus-5-5" and calls[0]["fallbacks"] == "default"
+
+    llm._client.beta.messages = FakeMessages("refusal")
+    llm._last_call = 0.0
+    llm.summary(s, [])
+    wait()
+    assert "refusal" in llm.status()["error"]
+    assert llm.summary(s, recs) == "Ringkasan."  # ringkasan lama tetap dipakai

@@ -53,6 +53,7 @@ class LLMSummarizer:
         self.refresh_s = float(os.environ.get("LLM_REFRESH_S") or 60)
         self.error: str | None = None
         self._client: Any = None
+        self._sdk: Any = None  # modul anthropic (disimpan supaya tidak di-import ulang)
         self._lock = threading.Lock()
         self._summary: str | None = None
         self._fingerprint: tuple | None = None
@@ -68,6 +69,7 @@ class LLMSummarizer:
             self.reason = "paket anthropic belum terpasang"
             return
         # Key dibaca SDK dari environment (diisi dari backend/.env).
+        self._sdk = anthropic
         self._client = anthropic.Anthropic(timeout=20.0, max_retries=1)
         self.reason = None
 
@@ -127,8 +129,6 @@ class LLMSummarizer:
                 self._fingerprint = fp
 
     def _call(self, payload: str) -> str | None:
-        import anthropic
-
         kwargs: dict[str, Any] = dict(
             model=self.model,
             max_tokens=2000,
@@ -143,7 +143,7 @@ class LLMSummarizer:
                 )
             else:
                 resp = self._client.messages.create(**kwargs)
-        except anthropic.AuthenticationError:
+        except self._sdk.AuthenticationError:
             self._client = None  # key salah: matikan LLM sampai server di-restart
             self.reason = "API key ditolak (cek ANTHROPIC_API_KEY)"
             raise
