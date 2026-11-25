@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { AlertTriangle, CalendarClock, Camera, Clock, CupSoda, Hourglass, PackageX, Plus, Users, UtensilsCrossed } from 'lucide-react'
+import { AlertTriangle, Armchair, CalendarClock, Camera, Clock, CupSoda, Hourglass, Loader2, PackageX, Plus, Timer, Users, UtensilsCrossed, WifiOff } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { StatCard } from '@/components/ui/stat-card'
 import { TableCard } from '@/components/TableCard'
-import { dwellDistribution, tables, tableStatusMeta, type TableStatus } from '@/data/mock'
+import { dwellDistribution as mockDwell, tables as mockTables, tableStatusMeta, type TableStatus } from '@/data/mock'
+import { toDiningTable, useOccupancyLive, type OccupancySnapshot } from '@/lib/occupancyApi'
+import { fmtClock, fmtDuration } from '@/lib/waitingApi'
 import { cn, formatMinutes } from '@/lib/utils'
 
 const filters: { key: 'semua' | TableStatus; label: string }[] = [
@@ -20,20 +23,71 @@ const filters: { key: 'semua' | TableStatus; label: string }[] = [
 
 export default function TableMap() {
   const [filter, setFilter] = useState<'semua' | TableStatus>('semua')
-  const [selectedId, setSelectedId] = useState('T4')
-  const selected = tables.find((t) => t.id === selectedId)!
-  const zones = ['Indoor', 'Outdoor', 'VIP'] as const
+  const [selectedId, setSelectedId] = useState('T1')
+  const { data, conn } = useOccupancyLive()
+  // Data asli dari backend CV kalau terhubung; kalau belum, tampilkan data contoh.
+  const live = conn === 'live' && data != null
+  const tables = live ? data.tables.map(toDiningTable) : mockTables
+  const selected = tables.find((t) => t.id === selectedId) ?? tables[0]
 
   const list = tables.filter((t) => filter === 'semua' || t.status === filter)
+  const groups = live
+    ? [{ label: 'Area kamera', items: list }]
+    : (['Indoor', 'Outdoor', 'VIP'] as const).map((zone) => ({ label: zone, items: list.filter((t) => t.zone === zone) }))
+  const people = tables.reduce((s, t) => s + t.people, 0)
+  const seats = tables.reduce((s, t) => s + t.seats, 0)
+  const seated = tables.filter((t) => t.durationMin > 0)
   const soonFree = tables
     .filter((t) => t.estFreeMin !== undefined)
     .sort((a, b) => a.estFreeMin! - b.estFreeMin!)
-  const reserved = tables.filter((t) => t.status === 'reserved')
+  const reserved = mockTables.filter((t) => t.status === 'reserved') // fitur reservasi (Micheal), masih data contoh
+  const distribution = live ? data.stats.distribution : mockDwell
 
   const ratio = (n: number) => (selected.people ? n / selected.people : 0)
 
+  if (!selected) {
+    return <p className="py-8 text-center text-sm text-muted-foreground">Belum ada meja di konfigurasi backend.</p>
+  }
+
   return (
     <div className="space-y-6">
+      <SourceBar data={data} conn={conn} />
+
+      {/* Ringkasan okupansi */}
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <StatCard
+          label="Orang di Meja"
+          value={`${people}`}
+          hint={`${tables.filter((t) => t.people > 0).length}/${tables.length} meja terisi`}
+          icon={Users}
+        />
+        <StatCard
+          label="Kursi Terpakai"
+          value={`${Math.round((100 * people) / Math.max(1, seats))}%`}
+          hint={`${people} dari ${seats} kursi`}
+          icon={Armchair}
+          tone="violet"
+        />
+        <StatCard
+          label="Rata-rata Lama Duduk"
+          value={
+            live
+              ? fmtDuration(data.stats.avg_dwell_s)
+              : formatMinutes(Math.round(seated.reduce((s, t) => s + t.durationMin, 0) / Math.max(1, seated.length)))
+          }
+          hint={live ? `${data.stats.count} kunjungan selesai` : 'meja yang sedang terisi'}
+          icon={Timer}
+          tone="sky"
+        />
+        <StatCard
+          label="Segera Kosong"
+          value={`${tables.filter((t) => t.status === 'segera-kosong').length} meja`}
+          hint={soonFree[0] ? `tercepat ${soonFree[0].name} ±${soonFree[0].estFreeMin}m` : 'belum ada estimasi'}
+          icon={Hourglass}
+          tone="amber"
+        />
+      </div>
+
       {/* Filter & legend */}
       <div className="flex flex-wrap items-center gap-2">
         {filters.map((f) => (
@@ -62,12 +116,12 @@ export default function TableMap() {
             <CardDescription>Klik meja untuk melihat detail deteksi</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            {zones.map((zone) => {
-              const zt = list.filter((t) => t.zone === zone)
+            {!list.length && <p className="py-6 text-center text-sm text-muted-foreground">Tidak ada meja dengan status ini.</p>}
+            {groups.map(({ label, items: zt }) => {
               if (!zt.length) return null
               return (
-                <div key={zone}>
-                  <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{zone}</p>
+                <div key={label}>
+                  <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{label}</p>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                     {zt.map((t) => (
                       <TableCard key={t.id} table={t} selected={t.id === selectedId} onClick={() => setSelectedId(t.id)} />
@@ -87,7 +141,7 @@ export default function TableMap() {
               <Badge variant="primary">{tableStatusMeta[selected.status].label}</Badge>
             </div>
             <CardDescription>
-              Zona {selected.zone} · {selected.seats} kursi
+              {live ? 'Kamera' : `Zona ${selected.zone}`} · {selected.seats} kursi{selected.phase && ` · ${selected.phase}`}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -131,6 +185,7 @@ export default function TableMap() {
                 </p>
                 <Progress value={selected.estFreeConfidence ?? 0} className="mt-2 bg-amber-200/60 dark:bg-amber-500/20" barClassName="bg-amber-500" />
                 <p className="mt-1 text-xs text-muted-foreground">Confidence {selected.estFreeConfidence}%</p>
+                {selected.estFreeReason && <p className="mt-1 text-xs text-muted-foreground">{selected.estFreeReason}</p>}
               </div>
             )}
             {selected.outsideFood && (
@@ -157,16 +212,28 @@ export default function TableMap() {
         <Card>
           <CardHeader>
             <CardTitle>Estimasi Bangku Segera Kosong</CardTitle>
-            <CardDescription>Diprediksi dari lama duduk, sisa makanan & gerakan</CardDescription>
+            <CardDescription>
+              {live
+                ? `Dari fase makan & riwayat ${data.learned.samples} kunjungan${data.learned.post_food_s ? '' : ' (masih pakai angka default)'}`
+                : 'Diprediksi dari lama duduk, sisa makanan & gerakan'}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            {!soonFree.length && <p className="py-4 text-center text-sm text-muted-foreground">Belum ada meja terisi.</p>}
             {soonFree.map((t) => (
-              <div key={t.id} className="flex items-center gap-3">
-                <div className="w-16 text-sm font-medium">{t.name}</div>
-                <div className="flex-1">
-                  <Progress value={100 - (t.estFreeMin! / 45) * 100} barClassName={t.estFreeMin! <= 10 ? 'bg-amber-500' : 'bg-indigo-500'} />
+              <div key={t.id}>
+                <div className="flex items-center gap-3">
+                  <div className="w-16 text-sm font-medium">{t.name}</div>
+                  <div className="flex-1">
+                    <Progress value={100 - (t.estFreeMin! / 45) * 100} barClassName={t.estFreeMin! <= 10 ? 'bg-amber-500' : 'bg-indigo-500'} />
+                  </div>
+                  <div className="w-20 text-right text-sm tabular">±{t.estFreeMin}m</div>
                 </div>
-                <div className="w-20 text-right text-sm tabular">±{t.estFreeMin}m</div>
+                {t.estFreeReason && (
+                  <p className="mt-0.5 pl-19 text-xs text-muted-foreground">
+                    {t.estFreeReason} · {t.estFreeConfidence}%
+                  </p>
+                )}
               </div>
             ))}
           </CardContent>
@@ -211,12 +278,12 @@ export default function TableMap() {
         <Card>
           <CardHeader>
             <CardTitle>Distribusi Lama di Meja</CardTitle>
-            <CardDescription>Jumlah kunjungan hari ini</CardDescription>
+            <CardDescription>{live ? `Kunjungan tercatat backend (${data.stats.count})` : 'Jumlah kunjungan hari ini'}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-52">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dwellDistribution} margin={{ left: -25, right: 4 }}>
+                <BarChart data={distribution} margin={{ left: -25, right: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis dataKey="rentang" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
@@ -239,6 +306,34 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Users; label: strin
         <Icon className="h-3.5 w-3.5" /> {label}
       </p>
       <p className="mt-1 text-lg font-semibold tabular">{value}</p>
+    </div>
+  )
+}
+
+function SourceBar({ data, conn }: { data: OccupancySnapshot | null; conn: string }) {
+  if (conn !== 'live' || !data) {
+    return (
+      <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+        {conn === 'offline' ? <WifiOff className="mt-0.5 h-4 w-4 shrink-0" /> : <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />}
+        <div>
+          <p className="font-medium">{conn === 'offline' ? 'Backend CV belum terhubung, menampilkan data contoh' : 'Menghubungkan ke backend…'}</p>
+          {conn === 'offline' && (
+            <p className="mt-1">
+              Jalankan di folder <code className="rounded bg-black/5 px-1 dark:bg-white/10">backend</code>:{' '}
+              <code className="rounded bg-black/5 px-1 dark:bg-white/10">.venv\Scripts\python -m app.main</code>
+            </p>
+          )}
+        </div>
+      </div>
+    )
+  }
+  const tone = data.source.state === 'running' ? 'bg-emerald-500' : data.source.state === 'error' ? 'bg-rose-500' : 'bg-amber-500'
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-4 py-2.5 text-sm">
+      <span className={cn('h-2 w-2 rounded-full', tone, data.source.state === 'running' && 'animate-pulse')} />
+      <span className="font-medium capitalize">{data.source.state}</span>
+      <span className="text-muted-foreground">· {data.source.detail}</span>
+      <span className="ml-auto text-xs text-muted-foreground tabular">waktu sumber {fmtClock(data.now)}</span>
     </div>
   )
 }

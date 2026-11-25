@@ -16,6 +16,8 @@ export interface DiningTable {
   reservedAt?: string
   estFreeMin?: number // #7 estimasi segera kosong (menit)
   estFreeConfidence?: number // 0-100
+  estFreeReason?: string // alasan estimasi (dari backend)
+  phase?: string // fase makan saat ini (dari backend)
   outsideFood?: boolean // #4 makanan dari luar
   idleDishesMin?: number // #8 piring tanpa orang (menit)
 }

@@ -13,6 +13,10 @@ Fitur waiting time:
   GET  /api/waiting                     sesi aktif, riwayat, alert, statistik
   POST /api/sessions/{id}/confirm       waiter menandai pesanan sudah lengkap
   WS   /ws/waiting                      snapshot waiting tiap 1 detik
+
+Fitur okupansi meja (jumlah orang, lama duduk, estimasi kosong):
+  GET  /api/occupancy                   status tiap meja, estimasi kosong, riwayat kunjungan, statistik
+  WS   /ws/occupancy                    snapshot okupansi tiap 1 detik
 """
 
 from __future__ import annotations
@@ -108,6 +112,17 @@ def confirm(session_id: str):
 @app.websocket("/ws/waiting")
 async def ws_waiting(ws: WebSocket):
     await _push(ws, hub.waiting_snapshot)
+
+
+# ------------------------------------------------ fitur: okupansi meja
+@app.get("/api/occupancy")
+def get_occupancy():
+    return hub.occupancy_snapshot()
+
+
+@app.websocket("/ws/occupancy")
+async def ws_occupancy(ws: WebSocket):
+    await _push(ws, hub.occupancy_snapshot)
 
 
 def cli() -> None:

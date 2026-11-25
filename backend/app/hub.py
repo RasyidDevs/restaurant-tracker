@@ -10,6 +10,7 @@ from .config import Config
 from .core.detection import Detection
 from .core.perception import Perception
 from .core.zones import TableObs
+from .features.table_occupancy import OccupancyRules, TableOccupancyFeature
 from .features.waiting_time import WaitingRules, WaitingTimeFeature
 
 
@@ -21,6 +22,8 @@ class Hub:
         # Daftarkan fitur di sini. Fitur baru cukup ditambah satu baris.
         self.waiting = WaitingTimeFeature(self.perception, WaitingRules.from_dict(cfg.features.get("waiting_time")))
         self.perception.add_feature(self.waiting)
+        self.occupancy = TableOccupancyFeature(self.perception, OccupancyRules.from_dict(cfg.features.get("table_occupancy")))
+        self.perception.add_feature(self.occupancy)
 
         self.events: deque[dict[str, Any]] = deque(maxlen=500)
         self.source_status: dict[str, Any] = {"state": "starting", "detail": ""}
@@ -47,6 +50,10 @@ class Hub:
     def waiting_snapshot(self) -> dict[str, Any]:
         with self.lock:
             return {**self.waiting.snapshot(self.perception), "source": dict(self.source_status)}
+
+    def occupancy_snapshot(self) -> dict[str, Any]:
+        with self.lock:
+            return {**self.occupancy.snapshot(self.perception), "source": dict(self.source_status)}
 
     def confirm_waiting(self, session_id: str) -> dict[str, Any] | None:
         with self.lock:
