@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets (API key, dll.). Salin .env.example -> .env
+.env
+.env.*
+!.env.example

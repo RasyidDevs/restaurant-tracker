@@ -44,6 +44,10 @@ Buat class dengan `name`, `on_step(t, perception, events)`, dan `snapshot(percep
 self.perception.add_feature(MyFeature(self.perception, ...))
 ```
 
+## Fitur: makanan/minuman dari luar & AI saran tindakan
+
+Lihat [docs/outside-food-and-ai.md](docs/outside-food-and-ai.md).
+
 ## Fitur: waiting time (`features/waiting_time.py`)
 
 | Kejadian | Aksi |

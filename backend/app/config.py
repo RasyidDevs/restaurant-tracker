@@ -20,6 +20,11 @@ EXAMPLE_CONFIG = BACKEND_DIR / "config" / "config.example.json"
 RUNTIME_GROUPS = ["person", "plate", "glass"]
 
 
+def runtime_groups(cfg: "Config") -> list[str]:
+    """RUNTIME_GROUPS + grup outside_* (makanan/minuman dari luar) yang ada di config.classes."""
+    return RUNTIME_GROUPS + [g for g in cfg.classes if g.startswith("outside_")]
+
+
 @dataclass
 class Config:
     source: str | int

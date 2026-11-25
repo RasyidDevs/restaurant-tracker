@@ -15,7 +15,11 @@
     "chair": ["chair", "couch", "bench"],
     "table": ["dining table"],
     "car": ["car", "truck"],
-    "motorcycle": ["motorcycle", "bicycle"]
+    "motorcycle": ["motorcycle", "bicycle"],
+    "outside_bottle": ["plastic bottle", "bottle"],
+    "outside_cup": ["takeaway cup", "plastic cup with straw", "boba cup", "paper coffee cup"],
+    "outside_bag": ["plastic bag", "paper bag", "shopping bag"],
+    "outside_box": ["food box", "styrofoam box", "takeaway food container"]
   },
   "core": {
     "seated_min_s": 30,
@@ -30,6 +34,24 @@
       "alert_no_item_min": 20,
       "alert_partial_min": 25,
       "target_min": 20
+    },
+    "outside_food": {
+      "conf_threshold": 0.45,
+      "min_persist_s": 8,
+      "min_hit_ratio": 0.6,
+      "clear_after_s": 30,
+      "cooldown_s": 300,
+      "require_occupied": true,
+      "ignore_kinds": []
+    },
+    "recommendations": {
+      "leftover_min": 5,
+      "waiting_no_item_min": 20,
+      "waiting_partial_min": 25,
+      "reservation_lead_min": 15,
+      "long_stay_min": 90,
+      "busy_occupancy": 0.85,
+      "llm_enabled": true
     }
   },
   "tables": [

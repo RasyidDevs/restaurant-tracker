@@ -12,14 +12,16 @@ import random
 import threading
 import time
 
-from .config import RUNTIME_GROUPS, Config
+from .config import Config, runtime_groups
 from .core.sources import is_file_source, iter_frames
 from .core.zones import TableObs
+from .features.outside_food_mock import OutsideFoodMock
 from .hub import Hub
 
 log = logging.getLogger("worker")
 
 COLORS = {"person": (241, 102, 99), "plate": (94, 197, 34), "glass": (233, 165, 14)}  # BGR
+OUTSIDE_COLOR = (0, 140, 255)  # oranye: indikasi makanan/minuman dari luar
 
 
 def start_worker(cfg: Config, hub: Hub, stop: threading.Event) -> threading.Thread:
@@ -44,7 +46,7 @@ def run_video(cfg: Config, hub: Hub, stop: threading.Event) -> None:
     from .core.detection import Detector
 
     hub.set_status("loading", f"Memuat model {cfg.model}")
-    det = Detector(cfg.model, cfg.classes, RUNTIME_GROUPS, cfg.conf, cfg.imgsz, cfg.device)
+    det = Detector(cfg.model, cfg.classes, runtime_groups(cfg), cfg.conf, cfg.imgsz, cfg.device)
     for w in det.warnings:
         log.warning(w)
     detail = f"{cfg.source} · {det.device} · {cfg.process_fps:g} fps"
@@ -89,7 +91,7 @@ def _annotate(frame, dets, hub: Hub):
         cv2.putText(img, label, (x, max(20, y - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
     for d in dets:
         x1, y1, x2, y2 = map(int, d.box)
-        color = COLORS.get(d.group, (255, 255, 255))
+        color = COLORS.get(d.group, OUTSIDE_COLOR if d.group.startswith("outside_") else (255, 255, 255))
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
         tag = d.group + (f"#{d.track_id}" if d.group == "person" and d.track_id is not None else "")
         cv2.putText(img, f"{tag} {d.conf:.2f}", (x1, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
@@ -146,12 +148,17 @@ def run_simulation(cfg: Config, hub: Hub, stop: threading.Event) -> None:
     rng = random.Random(42)
     sim_start = time.time() - 90 * 60  # mulai 90 menit lalu supaya riwayat langsung terisi
     sims = {z.id: _SimTable(rng, z.seats, len(z.chairs), sim_start) for z in cfg.tables}
+    outside_mock = OutsideFoodMock(list(sims))  # MOCK makanan/minuman dari luar
+
+    def step(t: float) -> None:
+        obs = {tid: s.obs(t) for tid, s in sims.items()}
+        hub.step(t, obs, outside_mock.obs(t, {tid: len(o.person_ids) for tid, o in obs.items()}))
     hub.set_status("running", f"Mode simulasi ({len(sims)} meja, {cfg.sim_speed:g}x)")
 
     tick = 0.5
     t = sim_start
     while not stop.is_set() and t < time.time():  # kejar 90 menit secepatnya
-        hub.step(t, {tid: s.obs(t) for tid, s in sims.items()})
+        step(t)
         t += tick
 
     wall_prev = time.time()
@@ -160,6 +167,6 @@ def run_simulation(cfg: Config, hub: Hub, stop: threading.Event) -> None:
         target = t + (now - wall_prev) * cfg.sim_speed
         wall_prev = now
         while t < target:
-            hub.step(t, {tid: s.obs(t) for tid, s in sims.items()})
+            step(t)
             t += tick
         time.sleep(0.1)
