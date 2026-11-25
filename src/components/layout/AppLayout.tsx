@@ -15,13 +15,14 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { alerts } from '@/data/mock'
+import { alerts as mockAlerts } from '@/data/mock'
+import { useAlertsLive } from '@/lib/parkingApi'
 
 const nav = [
   { to: '/', label: 'Ringkasan', icon: LayoutDashboard, end: true },
   { to: '/meja', label: 'Denah Meja', icon: LayoutGrid },
   { to: '/waiting-time', label: 'Waiting Time', icon: Clock },
-  { to: '/alert', label: 'Alert', icon: Bell, badge: alerts.filter((a) => !a.resolved).length },
+  { to: '/alert', label: 'Alert', icon: Bell, alertBadge: true },
   { to: '/parkir', label: 'Parkiran', icon: Car },
   { to: '/ai-insight', label: 'AI Insight', icon: Sparkles },
   { to: '/kamera', label: 'Kamera', icon: Camera },
@@ -47,6 +48,11 @@ export function AppLayout() {
   })
   const [open, setOpen] = useState(false)
   const { pathname } = useLocation()
+  const { data: liveAlerts, conn } = useAlertsLive()
+  const alertCount =
+    conn === 'live' && liveAlerts
+      ? liveAlerts.alerts.filter((a) => !a.resolved).length
+      : mockAlerts.filter((a) => !a.resolved).length
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark)
@@ -97,9 +103,9 @@ export function AppLayout() {
             >
               <item.icon className="h-4 w-4" />
               {item.label}
-              {item.badge ? (
+              {item.alertBadge && alertCount > 0 ? (
                 <span className="ml-auto rounded-full bg-rose-500 px-1.5 text-[10px] font-semibold text-white">
-                  {item.badge}
+                  {alertCount}
                 </span>
               ) : null}
             </NavLink>

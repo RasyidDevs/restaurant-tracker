@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback } from 'react'
+import { fmtClock, fmtDuration, useLiveSocket, type ConnState, type SourceInfo } from '@/lib/liveSocket'
+
+export { fmtClock, fmtDuration, type ConnState }
 
 export interface WaitingItem {
   kind: 'piring' | 'gelas'
@@ -49,7 +52,7 @@ export interface WaitingTable {
 
 export interface WaitingSnapshot {
   now: number
-  source: { state: 'starting' | 'loading' | 'running' | 'finished' | 'error'; detail: string }
+  source: SourceInfo
   rules: { target_min: number; alert_no_item_min: number; alert_partial_min: number; require_drinks: boolean }
   tables: WaitingTable[]
   active: WaitingSession[]
@@ -68,45 +71,8 @@ export interface WaitingSnapshot {
   }
 }
 
-export type ConnState = 'connecting' | 'live' | 'offline'
-
-/** Berlangganan snapshot waiting time dari backend lewat WebSocket (auto-reconnect). */
 export function useWaitingLive() {
-  const [data, setData] = useState<WaitingSnapshot | null>(null)
-  const [conn, setConn] = useState<ConnState>('connecting')
-  const wsRef = useRef<WebSocket | null>(null)
-
-  useEffect(() => {
-    let closed = false
-    let retry: ReturnType<typeof setTimeout> | undefined
-
-    const connect = () => {
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      const ws = new WebSocket(`${proto}://${location.host}/ws/waiting`)
-      wsRef.current = ws
-      ws.onopen = () => setConn('live')
-      ws.onmessage = (e) => {
-        try {
-          setData(JSON.parse(e.data))
-        } catch {
-          /* abaikan pesan rusak */
-        }
-      }
-      ws.onclose = () => {
-        if (closed) return
-        setConn('offline')
-        retry = setTimeout(connect, 3000)
-      }
-      ws.onerror = () => ws.close()
-    }
-    connect()
-
-    return () => {
-      closed = true
-      clearTimeout(retry)
-      wsRef.current?.close()
-    }
-  }, [])
+  const { data, conn } = useLiveSocket<WaitingSnapshot>('/ws/waiting')
 
   const confirm = useCallback(async (sessionId: string) => {
     const res = await fetch(`/api/sessions/${sessionId}/confirm`, { method: 'POST' })
@@ -115,19 +81,4 @@ export function useWaitingLive() {
   }, [])
 
   return { data, conn, confirm }
-}
-
-/** 754 -> "12:34", 3725 -> "1:02:05" */
-export function fmtDuration(sec: number | null | undefined) {
-  if (sec == null) return '–'
-  const s = Math.max(0, Math.round(sec))
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const ss = String(s % 60).padStart(2, '0')
-  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`
-}
-
-export function fmtClock(epoch: number | null | undefined) {
-  if (epoch == null) return '–'
-  return new Date(epoch * 1000).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
 }

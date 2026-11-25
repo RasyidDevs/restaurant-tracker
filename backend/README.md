@@ -80,17 +80,18 @@ Video demo menempel potongan foto asli (orang, cangkir, piring dari klip gratis 
 Skenario: Meja 1 (2 orang) dilayani normal dan selesai otomatis ±49 dtk. Meja 2 (3 orang) dapur lambat, sehingga muncul alert "belum disajikan", lalu hanya 2 dari 3 piring tiba, sehingga muncul alert "belum lengkap" (coba klik **Sudah lengkap** di dashboard).
 Ini video **rekayasa** untuk menunjukkan alur. Untuk lomba, rekam video asli dari sudut kamera yang akan dipakai.
 
-**Dengan video rekaman:**
+**Dengan 2 video rekaman berbeda (meja + parkiran):**
 ```bash
-# 1. deteksi meja & kursi otomatis (pakai video saat restoran sepi), cek config/layout_preview.jpg
-.venv\Scripts\python tools\auto_layout.py --source videos\demo.mp4
-#    atau gambar manual: .venv\Scripts\python tools\zone_editor.py --source videos\demo.mp4
-# 2. jalankan
-.venv\Scripts\python -m app.main --source videos\demo.mp4
+# 1. kalibrasi meja (opsional otomatis / manual)
+.venv\Scripts\python tools\auto_layout.py --source videos\demo_meja.mp4
+# 2. kalibrasi slot parkir (opsional; jika dilewati, kendaraan diam dideteksi otomatis sebagai auto-slot)
+.venv\Scripts\python tools\zone_editor.py --mode parking --source videos\demo_parkir.mp4
+# 3. jalankan kedua video sekaligus
+.venv\Scripts\python -m app.main --source videos\demo_meja.mp4 --parking-source videos\demo_parkir.mp4
 ```
-CCTV: `--source rtsp://user:pass@ip:554/stream`
+CCTV: `--source rtsp://... --parking-source rtsp://...`
 
-Dashboard: `npm run dev` di folder root, lalu buka halaman **Waiting Time** (Vite mem-proxy `/api` dan `/ws` ke port 8000).
+Dashboard: `npm run dev` di folder root, lalu buka halaman **Waiting Time**, **Parkiran**, atau **Alert** (Vite mem-proxy `/api` dan `/ws` ke port 8000).
 
 Kecepatan terukur: YOLO11s ±57 ms/frame di RTX 4050 (±17 fps), sedangkan pipeline memakai 5 fps.
 
@@ -98,9 +99,13 @@ Kecepatan terukur: YOLO11s ±57 ms/frame di RTX 4050 (±17 fps), sedangkan pipel
 | | |
 |---|---|
 | `GET /api/core/tables`, `WS /ws/core` | status inti tiap meja |
-| `GET /api/stream.mjpg` | video beranotasi (zona, kursi, deteksi, timer) |
+| `GET /api/stream.mjpg` | video meja beranotasi (zona, kursi, deteksi, timer) |
 | `GET /api/waiting`, `WS /ws/waiting` | waiting time: sesi aktif, riwayat, alert, statistik |
 | `POST /api/sessions/{id}/confirm` | waiter menandai sudah lengkap |
+| `GET /api/parking`, `WS /ws/parking` | parkiran: slot mobil/motor, peringatan mendekati & lewat batas, riwayat |
+| `GET /api/parking/stream.mjpg` | video parkiran beranotasi (slot, kendaraan, timer) |
+| `POST /api/parking/slots/{id}/notify` | kirim peringatan ke juru parkir |
+| `GET /api/alerts`, `WS /ws/alerts`, `POST /api/alerts/{id}/resolve` | pusat alert gabungan live |
 
 ### Tes
 `.venv\Scripts\python -m pytest -q tests`. Isinya `test_core.py` (penghalus, dwell, zona, kursi, status meja, clustering layout) dan `test_waiting_time.py` (8 skenario waiting time).

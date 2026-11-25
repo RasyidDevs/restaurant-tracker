@@ -68,18 +68,6 @@ export const orders: Order[] = [
   { id: 'ORD-1040', table: 'Meja 9', items: ['Bakso x2', 'Teh Manis x2'], orderedAt: '18:20', waitMin: 9, targetMin: 15, status: 'diantar' },
 ]
 
-export const waitingTrend = [
-  { jam: '11:00', rata: 9, target: 15 },
-  { jam: '12:00', rata: 16, target: 15 },
-  { jam: '13:00', rata: 18, target: 15 },
-  { jam: '14:00', rata: 11, target: 15 },
-  { jam: '15:00', rata: 8, target: 15 },
-  { jam: '16:00', rata: 10, target: 15 },
-  { jam: '17:00', rata: 13, target: 15 },
-  { jam: '18:00', rata: 17, target: 15 },
-  { jam: '19:00', rata: 21, target: 15 },
-]
-
 export const occupancyTrend = [
   { jam: '11:00', okupansi: 35 },
   { jam: '12:00', okupansi: 82 },

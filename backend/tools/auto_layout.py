@@ -64,6 +64,8 @@ def main() -> None:
         print("PERINGATAN:", w)
 
     frames = sample_frames(a.source, a.frames)
+    if not frames:
+        sys.exit(f"Tidak ada frame yang berhasil dibaca dari {a.source}")
     print(f"Mendeteksi meja & kursi pada {len(frames)} frame ...")
     table_boxes, chair_boxes = [], []
     for f in frames:

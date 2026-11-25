@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import threading
 from typing import Any
 
 TRACKER_YAML = Path(__file__).resolve().parent / "tracker.yaml"
+_MODEL_LOCK = threading.Lock()
 
 
 @dataclass
@@ -35,21 +37,23 @@ class Detector:
         import torch
 
         self.conf = conf
-        self.imgsz = imgsz
         self.device = device if (device == "cpu" or torch.cuda.is_available()) else "cpu"
+        # Pada CPU tanpa GPU, batasi resolusi inferensi ke 640 agar stream tetap mulus
+        self.imgsz = min(imgsz, 640) if self.device == "cpu" else imgsz
         wanted_groups = groups or list(classes)
 
-        if "world" in Path(model).name.lower():
-            # YOLO-World: kelas ditentukan lewat teks, jadi "plate" bisa dideteksi tanpa training.
-            from ultralytics import YOLOWorld
+        with _MODEL_LOCK:
+            if "world" in Path(model).name.lower():
+                # YOLO-World: kelas ditentukan lewat teks, jadi "plate" bisa dideteksi tanpa training.
+                from ultralytics import YOLOWorld
 
-            self.model = YOLOWorld(model)
-            prompts = list(dict.fromkeys(c for g in wanted_groups for c in classes.get(g, [])))
-            self.model.set_classes(prompts)
-        else:
-            from ultralytics import YOLO
+                self.model = YOLOWorld(model)
+                prompts = list(dict.fromkeys(c for g in wanted_groups for c in classes.get(g, [])))
+                self.model.set_classes(prompts)
+            else:
+                from ultralytics import YOLO
 
-            self.model = YOLO(model)
+                self.model = YOLO(model)
 
         names: dict[int, str] = self.model.names  # type: ignore[assignment]
         self.class_group: dict[int, str] = {}
@@ -87,11 +91,13 @@ class Detector:
         tracker: ByteTrack membuang deteksi ber-confidence rendah (mis. piring dari
         YOLO-World skor ~0.2), padahal benda tidak butuh ID untuk dihitung.
         """
-        dets = self.detect(frame)
         tracked_groups = {"person", "car", "motorcycle"}
         track_cls = [c for c, g in self.class_group.items() if g in tracked_groups]
+        untracked_cls = [c for c, g in self.class_group.items() if g not in tracked_groups]
         if not track_cls:
-            return dets
+            return self.detect(frame)
+        # shortcut: kamera meja menjalankan predict() terpisah untuk plate/glass sampai model khusus piring dipakai
+        untracked = self._detect_classes(frame, untracked_cls) if untracked_cls else []
         res = self.model.track(
             frame,
             persist=True,
@@ -102,16 +108,19 @@ class Detector:
             tracker=str(TRACKER_YAML),
             verbose=False,
         )[0]
-        return [d for d in dets if d.group not in tracked_groups] + self._parse(res)
+        return untracked + self._parse(res)
 
-    def detect(self, frame) -> list[Detection]:
-        """Deteksi saja tanpa tracking. Untuk kalibrasi layout (meja & kursi)."""
+    def _detect_classes(self, frame, classes: list[int]) -> list[Detection]:
         res = self.model.predict(
             frame,
             conf=self.conf,
             imgsz=self.imgsz,
             device=self.device,
-            classes=list(self.class_group),
+            classes=classes,
             verbose=False,
         )[0]
         return self._parse(res)
+
+    def detect(self, frame) -> list[Detection]:
+        """Deteksi saja tanpa tracking. Untuk kalibrasi layout (meja & kursi)."""
+        return self._detect_classes(frame, list(self.class_group))

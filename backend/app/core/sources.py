@@ -55,7 +55,11 @@ def iter_frames(
                     continue
                 vt = offset + idx / video_fps
                 if realtime:
-                    delay = vt - (time.time() - wall0)
+                    elapsed = time.time() - wall0
+                    # Jika CPU lebih lambat dari video, lompati frame agar stream tetap sinkron real-time
+                    if vt < elapsed - min_interval:
+                        continue
+                    delay = vt - elapsed
                     if delay > 0:
                         time.sleep(delay)
                 yield t0 + vt, frame

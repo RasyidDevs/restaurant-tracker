@@ -20,9 +20,13 @@ const filters: { key: 'semua' | TableStatus; label: string }[] = [
 
 export default function TableMap() {
   const [filter, setFilter] = useState<'semua' | TableStatus>('semua')
-  const [selectedId, setSelectedId] = useState('T4')
-  const selected = tables.find((t) => t.id === selectedId)!
+  const [selectedId, setSelectedId] = useState(tables[0]?.id ?? '')
+  const selected = tables.find((t) => t.id === selectedId) ?? tables[0]
   const zones = ['Indoor', 'Outdoor', 'VIP'] as const
+
+  if (!selected) {
+    return <p className="py-12 text-center text-sm text-muted-foreground">Belum ada data meja.</p>
+  }
 
   const list = tables.filter((t) => filter === 'semua' || t.status === filter)
   const soonFree = tables

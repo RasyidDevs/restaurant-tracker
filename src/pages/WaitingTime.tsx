@@ -12,13 +12,13 @@ import {
   Timer,
   UtensilsCrossed,
   Video,
-  WifiOff,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge, type BadgeVariant } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { StatCard } from '@/components/ui/stat-card'
-import { fmtClock, fmtDuration, useWaitingLive, type WaitingSession, type WaitingSnapshot } from '@/lib/waitingApi'
+import { SourceBar } from '@/components/SourceBar'
+import { fmtClock, fmtDuration, useWaitingLive, type WaitingSession } from '@/lib/waitingApi'
 import { cn } from '@/lib/utils'
 
 const statusMeta: Record<WaitingSession['status'], { label: string; variant: BadgeVariant }> = {
@@ -52,7 +52,7 @@ export default function WaitingTime() {
 
   return (
     <div className="space-y-6">
-      <SourceBar data={data} conn={conn} />
+      <SourceBar source={data?.source} now={data?.now} conn={conn} />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <StatCard label="Sedang Menunggu" value={`${data?.active.length ?? 0} meja`} icon={ChefHat} />
@@ -275,19 +275,22 @@ export default function WaitingTime() {
       </Card>
 
       {/* Kamera beranotasi (hanya untuk sumber video asli) */}
-      {conn === 'live' && data && !data.source.detail.startsWith('Mode simulasi') && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Video className="h-4 w-4" /> Kamera & Deteksi
-            </CardTitle>
-            <CardDescription>Zona meja, kotak deteksi orang/piring/gelas, dan timer per meja</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <img src="/api/stream.mjpg" alt="Stream kamera beranotasi" className="w-full rounded-lg bg-slate-900" />
-          </CardContent>
-        </Card>
-      )}
+      {conn === 'live' &&
+        data &&
+        !data.source.detail.startsWith('Mode simulasi') &&
+        (data.source.state === 'running' || data.source.state === 'finished') && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Video className="h-4 w-4" /> Kamera & Deteksi
+              </CardTitle>
+              <CardDescription>Zona meja, kotak deteksi orang/piring/gelas, dan timer per meja</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <img src="/api/stream.mjpg" alt="Stream kamera beranotasi" className="w-full rounded-lg bg-slate-900" />
+            </CardContent>
+          </Card>
+        )}
     </div>
   )
 }
@@ -301,40 +304,6 @@ function ItemCell({ served, need, firstAt }: { served: number; need: number; fir
         {need > 0 && <span className="font-normal text-muted-foreground">/{need}</span>}
       </span>
       <p className="text-xs text-muted-foreground">{firstAt != null ? `pertama ${fmtDuration(firstAt)}` : 'belum'}</p>
-    </div>
-  )
-}
-
-function SourceBar({ data, conn }: { data: WaitingSnapshot | null; conn: string }) {
-  if (conn === 'offline' || (conn === 'connecting' && !data)) {
-    return (
-      <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
-        {conn === 'offline' ? <WifiOff className="mt-0.5 h-4 w-4 shrink-0" /> : <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />}
-        <div>
-          <p className="font-medium">{conn === 'offline' ? 'Backend CV belum terhubung' : 'Menghubungkan ke backend…'}</p>
-          {conn === 'offline' && (
-            <p className="mt-1">
-              Jalankan di folder <code className="rounded bg-black/5 px-1 dark:bg-white/10">backend</code>:{' '}
-              <code className="rounded bg-black/5 px-1 dark:bg-white/10">.venv\Scripts\python -m app.main</code>
-            </p>
-          )}
-        </div>
-      </div>
-    )
-  }
-  if (!data) return null
-  const tone =
-    data.source.state === 'running'
-      ? 'bg-emerald-500'
-      : data.source.state === 'error'
-        ? 'bg-rose-500'
-        : 'bg-amber-500'
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-4 py-2.5 text-sm">
-      <span className={cn('h-2 w-2 rounded-full', tone, data.source.state === 'running' && 'animate-pulse')} />
-      <span className="font-medium capitalize">{data.source.state}</span>
-      <span className="text-muted-foreground">· {data.source.detail}</span>
-      <span className="ml-auto text-xs text-muted-foreground tabular">waktu sumber {fmtClock(data.now)}</span>
     </div>
   )
 }

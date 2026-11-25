@@ -1,28 +1,74 @@
 import { Link } from 'react-router-dom'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ArrowRight, Bell, Car, Clock, Hourglass, Timer, Users } from 'lucide-react'
+import { ArrowRight, Bell, Bike, Car, Clock, Hourglass, Timer, Users } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatCard } from '@/components/ui/stat-card'
 import { TableCard } from '@/components/TableCard'
 import { AlertRow } from '@/components/AlertRow'
 import { InsightCard } from '@/components/InsightCard'
-import { alerts, insights, occupancyTrend, orders, parkingSlots, tables } from '@/data/mock'
+import { alerts as mockAlerts, insights, occupancyTrend, orders, parkingSlots, tables, type AlertItem } from '@/data/mock'
+import { fmtClock, fmtSmartDuration } from '@/lib/liveSocket'
+import { useAlertsLive, useParkingLive } from '@/lib/parkingApi'
+import { formatMinutes } from '@/lib/utils'
 
 export default function Dashboard() {
+  const { data: parking, conn: parkConn } = useParkingLive()
+  const { data: liveAlerts, conn: alertConn } = useAlertsLive()
+
   const occupied = tables.filter((t) => t.people > 0).length
+  const occPct = tables.length ? Math.round((occupied / tables.length) * 100) : 0
   const people = tables.reduce((s, t) => s + t.people, 0)
   const active = orders.filter((o) => o.status !== 'diantar')
-  const avgWait = Math.round(active.reduce((s, o) => s + o.waitMin, 0) / active.length)
+  const avgWait = active.length ? Math.round(active.reduce((s, o) => s + o.waitMin, 0) / active.length) : 0
   const seated = tables.filter((t) => t.durationMin > 0)
-  const avgDwell = Math.round(seated.reduce((s, t) => s + t.durationMin, 0) / seated.length)
+  const avgDwell = seated.length ? Math.round(seated.reduce((s, t) => s + t.durationMin, 0) / seated.length) : 0
   const soonFree = tables.filter((t) => t.status === 'segera-kosong').length
-  const openAlerts = alerts.filter((a) => !a.resolved)
-  const overParking = parkingSlots.filter((p) => p.plate && p.durationMin > p.limitMin).length
+
+  const openAlerts: AlertItem[] =
+    alertConn === 'live' && liveAlerts
+      ? liveAlerts.alerts
+          .filter((a) => !a.resolved)
+          .map((a) => ({
+            id: a.id,
+            type: a.type,
+            severity: a.severity,
+            title: a.title,
+            description: a.description,
+            location: a.location,
+            time: fmtClock(a.t),
+            camera: a.camera,
+            resolved: a.resolved,
+          }))
+      : mockAlerts.filter((a) => !a.resolved)
+
+  const parkWarnings =
+    parkConn === 'live' && parking
+      ? parking.warnings.map((p) => ({
+          id: p.id,
+          type: p.vehicle_type,
+          label: p.label ?? p.id,
+          durText: fmtSmartDuration(p.duration_s),
+          over: p.level === 'lewat',
+        }))
+      : parkingSlots
+          .filter((p) => p.durationMin > 0 && p.durationMin / p.limitMin >= 0.85)
+          .map((p) => ({
+            id: p.id,
+            type: p.type,
+            label: p.plate ?? p.id,
+            durText: formatMinutes(p.durationMin),
+            over: p.durationMin > p.limitMin,
+          }))
+
+  const overParking =
+    parkConn === 'live' && parking
+      ? parking.stats.over_count
+      : parkingSlots.filter((p) => p.durationMin > p.limitMin).length
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="Okupansi Meja" value={`${occupied}/${tables.length}`} hint={`${Math.round((occupied / tables.length) * 100)}% terisi`} icon={Users} />
+        <StatCard label="Okupansi Meja" value={`${occupied}/${tables.length}`} hint={`${occPct}% terisi`} icon={Users} />
         <StatCard label="Total Pelanggan" value={`${people}`} hint="terdeteksi kamera" icon={Users} tone="sky" />
         <StatCard label="Rata-rata Waiting" value={`${avgWait}m`} hint="target 15m" icon={Clock} tone="amber" />
         <StatCard label="Rata-rata Lama Duduk" value={`${avgDwell}m`} hint="meja aktif" icon={Timer} tone="violet" />
@@ -61,9 +107,11 @@ export default function Dashboard() {
             </Link>
           </CardHeader>
           <CardContent className="space-y-2">
-            {openAlerts.slice(0, 4).map((a) => (
-              <AlertRow key={a.id} alert={a} />
-            ))}
+            {openAlerts.length ? (
+              openAlerts.slice(0, 4).map((a) => <AlertRow key={a.id} alert={a} />)
+            ) : (
+              <p className="py-6 text-center text-sm text-muted-foreground">Tidak ada alert aktif.</p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -124,26 +172,31 @@ export default function Dashboard() {
           </Link>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {parkingSlots
-              .filter((p) => p.plate && p.durationMin / p.limitMin >= 0.85)
-              .map((p) => (
-                <span
-                  key={p.id}
-                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${
-                    p.durationMin > p.limitMin
-                      ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300'
-                      : 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300'
-                  }`}
-                >
-                  <Car className="h-4 w-4" />
-                  <span className="font-medium">{p.plate}</span>
-                  <span className="text-xs opacity-80">
-                    {p.id} · {Math.floor(p.durationMin / 60)}j {p.durationMin % 60}m
+          {!parkWarnings.length ? (
+            <p className="text-sm text-muted-foreground">Semua kendaraan masih dalam batas waktu parkir.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {parkWarnings.map((p) => {
+                const VIcon = p.type === 'motor' ? Bike : Car
+                return (
+                  <span
+                    key={p.id}
+                    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${
+                      p.over
+                        ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300'
+                        : 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300'
+                    }`}
+                  >
+                    <VIcon className="h-4 w-4" />
+                    <span className="font-medium">{p.label}</span>
+                    <span className="text-xs opacity-80">
+                      {p.id} · {p.durText}
+                    </span>
                   </span>
-                </span>
-              ))}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

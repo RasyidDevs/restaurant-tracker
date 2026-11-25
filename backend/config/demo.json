@@ -1,6 +1,8 @@
 {
   "source": "videos/demo_waiting.mp4",
+  "parking_source": "simulate",
   "model": "yolov8s-worldv2.pt",
+  "parking_model": "yolo11n.pt",
   "device": "0",
   "conf": 0.2,
   "imgsz": 960,
@@ -51,6 +53,13 @@
       "alert_no_item_min": 0.75,
       "alert_partial_min": 1.25,
       "target_min": 1
+    },
+    "parking": {
+      "car_limit_min": 0.5,
+      "bike_limit_min": 0.4,
+      "warn_ratio": 0.75,
+      "min_dwell_s": 3,
+      "lost_grace_s": 4
     }
   },
   "tables": [
