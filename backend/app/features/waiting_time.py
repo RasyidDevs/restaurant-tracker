@@ -9,6 +9,10 @@ occupied_since, empty_since. Fitur ini hanya berisi aturan sesi:
   MENUNGGU ──(waiter klik "sudah lengkap")───────────────────► DISAJIKAN  SELESAI = item terakhir
   MENUNGGU ──(meja kosong >= empty_grace_s)──────────────────► KOSONG     sesi "pelanggan pergi"
   DISAJIKAN ──(meja kosong >= empty_grace_s)─────────────────► KOSONG
+  DISAJIKAN ──(rombongan baru duduk di meja yang sudah dibereskan)► MENUNGGU  sesi baru
+
+Item dihitung per kenaikan jumlah (bukan puncak), jadi item yang diangkat tidak
+menghalangi item berikutnya terhitung.
 
 Alert dicek terus selama MENUNGGU:
   belum ada item setelah alert_no_item_min, item belum lengkap setelah alert_partial_min.
@@ -34,6 +38,8 @@ class WaitingRules:
     alert_no_item_min: float = 20.0
     alert_partial_min: float = 25.0
     target_min: float = 20.0
+    new_group_gap_s: float = 30.0  # meja kosong minimal selama ini sebelum rombongan baru dihitung
+    item_reappear_s: float = 60.0  # item hilang lalu muncul lagi dalam waktu ini = item yang sama
 
     @classmethod
     def from_dict(cls, d: dict[str, Any] | None) -> "WaitingRules":
@@ -85,6 +91,9 @@ class _TableWaiting:
         self.rules = rules
         self.phase = "kosong"  # kosong | menunggu | disajikan
         self.session: Session | None = None
+        self._missing: dict[str, list[float]] = {"plates": [], "glasses": []}  # waktu item hilang
+        self._emptied_at: float | None = None
+        self._items_at_empty = 0
 
     @property
     def name(self) -> str:
@@ -93,21 +102,14 @@ class _TableWaiting:
     def step(self, t: float, events: list[CoreEvent]) -> list[dict[str, Any]]:
         tb = self.table
         out: list[dict[str, Any]] = []
+        for e in events:
+            if e.table == tb.id and e.type == "emptied":
+                self._emptied_at = e.t
+                self._items_at_empty = tb.plates + tb.glasses
 
         if self.phase == "kosong":
             if tb.people > 0:
-                start = tb.occupied_since if tb.occupied_since is not None else t
-                bp, bg = tb.min_items_since(start)
-                self.session = Session(
-                    id=f"S{next(_ids):04d}",
-                    table_id=tb.id,
-                    start=start,
-                    baseline_plates=bp,
-                    baseline_glasses=bg,
-                    people_peak=tb.people,
-                )
-                self.phase = "menunggu"
-                out.append({"type": "session_start", "table": tb.id, "t": start})
+                out += self._start_session(t)
 
         elif self.phase == "menunggu":
             s = self.session
@@ -120,40 +122,84 @@ class _TableWaiting:
                 out += self._check_left(t)
 
         elif self.phase == "disajikan":
-            out += self._check_left(t)
+            if self._new_group_seated(events):
+                out += self._start_session(t)  # sesi lama sudah tercatat selesai
+            else:
+                out += self._check_left(t)
         return out
+
+    def _start_session(self, t: float) -> list[dict[str, Any]]:
+        tb = self.table
+        start = tb.occupied_since if tb.occupied_since is not None else t
+        bp, bg = tb.min_items_since(start)
+        self.session = Session(
+            id=f"S{next(_ids):04d}",
+            table_id=tb.id,
+            start=start,
+            baseline_plates=bp,
+            baseline_glasses=bg,
+            people_peak=tb.people,
+        )
+        self._missing = {"plates": [], "glasses": []}
+        self.phase = "menunggu"
+        out: list[dict[str, Any]] = [{"type": "session_start", "table": tb.id, "t": start}]
+        # Item yang sudah datang antara START dan sesi dibuat (jarang) langsung dihitung.
+        for kind, current, base in (("plates", tb.plates, bp), ("glasses", tb.glasses, bg)):
+            if current > base:
+                out.append(self._add_items(kind, current - base, t))
+        return out
+
+    def _new_group_seated(self, events: list[CoreEvent]) -> bool:
+        """Rombongan baru duduk sebelum empty_grace_s habis: meja sempat kosong cukup lama
+        dan sudah dibereskan (piring/gelas berkurang). Rombongan lama yang kembali dari
+        toilet tidak memicu sesi baru karena piring mereka masih di meja."""
+        tb = self.table
+        occ = next((e for e in events if e.table == tb.id and e.type == "occupied"), None)
+        if occ is None or self._emptied_at is None:
+            return False
+        items = tb.plates + tb.glasses
+        cleared = items == 0 or items < self._items_at_empty
+        return occ.t - self._emptied_at >= self.rules.new_group_gap_s and cleared
 
     def _track_items(self, t: float, events: list[CoreEvent]) -> list[dict[str, Any]]:
-        s = self.session
+        """Hitung setiap kenaikan jumlah piring/gelas sebagai item baru.
+
+        Item yang hilang lalu muncul lagi dalam item_reappear_s dianggap item yang sama
+        (tertutup tangan/orang), bukan item baru. Item yang sudah diangkat lebih lama dari
+        itu tidak menghalangi item baru terhitung (mis. gelas 1 diangkat, gelas 2 datang).
+        """
         tb = self.table
-        assert s is not None
         out = []
-        # Piring lama diangkat -> turunkan baseline supaya piring baru tetap terhitung.
-        s.baseline_plates = min(s.baseline_plates, tb.plates)
-        s.baseline_glasses = min(s.baseline_glasses, tb.glasses)
-        change_at = {e.type: e.t for e in events if e.table == tb.id and e.type in ("plates", "glasses")}
-
-        for kind, label, current, base in (
-            ("plates", "piring", tb.plates, s.baseline_plates),
-            ("glasses", "gelas", tb.glasses, s.baseline_glasses),
-        ):
-            served_attr = "plates_served" if kind == "plates" else "glasses_served"
-            first_attr = "first_food_at" if kind == "plates" else "first_drink_at"
-            new = current - base
-            served = getattr(s, served_attr)
-            if new > served:  # pakai puncak: item yang diangkat tidak mengurangi
-                at = change_at.get(kind, t)
-                for n in range(served + 1, new + 1):
-                    s.items.append({"kind": label, "n": n, "t": at})
-                setattr(s, served_attr, new)
-                if getattr(s, first_attr) is None:
-                    setattr(s, first_attr, at)
-                s.last_item_at = max(s.last_item_at or at, at)
-                out.append({"type": "item", "table": tb.id, "kind": label, "count": new, "t": at})
-
-        if s.items and s.status == "menunggu":
-            s.status = "sebagian"
+        for e in events:
+            if e.table != tb.id or e.type not in ("plates", "glasses"):
+                continue
+            missing = self._missing[e.type]
+            if e.new < e.old:
+                missing.extend([e.t] * (e.old - e.new))
+            elif e.new > e.old:
+                missing[:] = [m for m in missing if e.t - m <= self.rules.item_reappear_s]
+                back = min(e.new - e.old, len(missing))
+                del missing[len(missing) - back :]
+                if e.new - e.old > back:
+                    out.append(self._add_items(e.type, e.new - e.old - back, e.t))
         return out
+
+    def _add_items(self, kind: str, n: int, at: float) -> dict[str, Any]:
+        s = self.session
+        assert s is not None
+        label = "piring" if kind == "plates" else "gelas"
+        served_attr = "plates_served" if kind == "plates" else "glasses_served"
+        first_attr = "first_food_at" if kind == "plates" else "first_drink_at"
+        served = getattr(s, served_attr)
+        for k in range(served + 1, served + n + 1):
+            s.items.append({"kind": label, "n": k, "t": at})
+        setattr(s, served_attr, served + n)
+        if getattr(s, first_attr) is None:
+            setattr(s, first_attr, at)
+        s.last_item_at = max(s.last_item_at or at, at)
+        if s.status == "menunggu":
+            s.status = "sebagian"
+        return {"type": "item", "table": self.table.id, "kind": label, "count": served + n, "t": at}
 
     def _check_complete(self) -> list[dict[str, Any]]:
         s = self.session

@@ -13,7 +13,7 @@ import threading
 import time
 
 from .config import RUNTIME_GROUPS, Config
-from .core.sources import is_file_source, iter_frames
+from .core.sources import is_file_source, iter_frames, redact_source
 from .core.zones import TableObs
 from .hub import Hub
 
@@ -33,8 +33,10 @@ def _guard(fn, cfg: Config, hub: Hub, stop: threading.Event) -> None:
     try:
         fn(cfg, hub, stop)
     except Exception as e:  # tampilkan error di dashboard, jangan mati diam-diam
-        log.exception("worker error")
-        hub.set_status("error", f"{type(e).__name__}: {e}")
+        # Pesan error dari library bisa memuat URL kamera lengkap dengan password.
+        msg = f"{type(e).__name__}: {e}".replace(str(cfg.source), redact_source(cfg.source))
+        log.error("worker error: %s", msg)
+        hub.set_status("error", msg)
 
 
 # --------------------------------------------------------------------- video
@@ -47,7 +49,7 @@ def run_video(cfg: Config, hub: Hub, stop: threading.Event) -> None:
     det = Detector(cfg.model, cfg.classes, RUNTIME_GROUPS, cfg.conf, cfg.imgsz, cfg.device)
     for w in det.warnings:
         log.warning(w)
-    detail = f"{cfg.source} · {det.device} · {cfg.process_fps:g} fps"
+    detail = f"{redact_source(cfg.source)} · {det.device} · {cfg.process_fps:g} fps"
     if det.warnings:
         detail += " · " + "; ".join(det.warnings)
     hub.set_status("running", detail)

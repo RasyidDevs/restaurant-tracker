@@ -49,10 +49,11 @@ self.perception.add_feature(MyFeature(self.perception, ...))
 | Kejadian | Aksi |
 |---|---|
 | Meja terisi (core `occupied`) | **START** = orang pertama terlihat; baseline = piring/gelas minimum sejak START |
-| Piring/gelas bertambah dari baseline | catat waktu (nilai puncak, jadi item diangkat tidak mengurangi) |
+| Piring/gelas bertambah | catat tiap kenaikan sebagai item baru; item yang hilang lalu muncul lagi dalam `item_reappear_s` tidak dihitung dua kali |
 | piring baru ≥ orang **dan** gelas baru ≥ orang | **SELESAI otomatis** = item terakhir tiba |
 | Waiter klik "Sudah lengkap" | **SELESAI** = item terakhir tiba (bukan waktu klik) |
 | Meja kosong ≥ 2 menit sebelum lengkap | sesi "pelanggan pergi" (tidak masuk rata-rata) |
+| Rombongan baru duduk di meja yang sudah dibereskan (kosong ≥ `new_group_gap_s`) | sesi baru, walau belum 2 menit |
 
 Alert dicek terus: belum ada sajian > 20 menit, belum lengkap > 25 menit.
 Metrik: waktu sampai minuman pertama, makanan pertama, dan lengkap.
@@ -116,4 +117,4 @@ YOLO COCO bawaan **tidak punya kelas `plate`**. Sementara dipakai `bowl`, sedang
 ## Pengaturan (`config/config.json`)
 
 `core`: `seated_min_s` (30), `lost_grace_s` (15), `count_window_s` / `count_hold_s` (3/3)
-`features.waiting_time`: `empty_grace_s` (120), `require_drinks` (true), `alert_no_item_min` (20), `alert_partial_min` (25), `target_min` (20)
+`features.waiting_time`: `empty_grace_s` (120), `require_drinks` (true), `alert_no_item_min` (20), `alert_partial_min` (25), `target_min` (20), `new_group_gap_s` (30, meja kosong minimal selama ini sebelum rombongan baru dihitung sesi baru), `item_reappear_s` (60, item hilang lalu muncul lagi dalam waktu ini dianggap item yang sama)

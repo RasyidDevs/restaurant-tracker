@@ -14,6 +14,7 @@ class DwellTracker:
         self.lost_grace_s = lost_grace_s  # hilang lebih lama dari ini dianggap pergi
         self.tracks: dict[int, list[float]] = {}  # id -> [first_seen, last_seen]
         self.last_seen_any: float | None = None
+        self.last_settled_seen: float | None = None  # terakhir kali orang yang sudah menetap terlihat
 
     def update(self, t: float, ids: list[int]) -> None:
         if ids:
@@ -23,6 +24,9 @@ class DwellTracker:
                 self.tracks[tid][1] = t
             else:
                 self.tracks[tid] = [t, t]
+            first, last = self.tracks[tid]
+            if last - first >= self.min_dwell_s:
+                self.last_settled_seen = t
         for tid in [k for k, (_, last) in self.tracks.items() if t - last > self.lost_grace_s]:
             del self.tracks[tid]
 

@@ -103,3 +103,47 @@ def test_person_joining_raises_requirement():
     s.run(1000, [1, 2, 3], 3, 3)
     (end,) = s.ended()
     assert end["session"]["people_peak"] == 3
+
+
+def test_new_group_right_after_previous_gets_own_session():
+    s = Sim()
+    s.run(300, [1, 2], 0, 0)
+    s.run(400, [1, 2], 2, 2)  # lengkap -> disajikan
+    s.run(1000, [1, 2], 2, 2)
+    s.run(1060, [], 0, 0)  # pergi, meja dibereskan
+    s.run(2000, [7, 8, 9], 0, 0)  # rombongan baru duduk 60 detik kemudian
+    starts = [e for e in s.events if e["type"] == "session_start"]
+    assert len(starts) == 2
+    assert starts[1]["t"] == pytest.approx(1060, abs=1)
+    assert s.w.phase_of("T1") == "menunggu"
+    assert [a["kind"] for a in s.alerts()] == []
+    s.run(2400, [7, 8, 9], 0, 0)  # 22 menit tanpa sajian -> alert untuk rombongan baru
+    assert [a["kind"] for a in s.alerts()] == ["belum_disajikan"]
+
+
+def test_group_returning_to_their_food_is_not_new_session():
+    s = Sim()
+    s.run(300, [1, 2], 0, 0)
+    s.run(400, [1, 2], 2, 2)  # lengkap
+    s.run(460, [], 2, 2)  # semua keluar sebentar, piring masih di meja
+    s.run(800, [5, 6], 2, 2)  # kembali (ID baru)
+    assert len([e for e in s.events if e["type"] == "session_start"]) == 1
+    assert s.w.phase_of("T1") == "disajikan"
+
+
+def test_item_cleared_then_next_item_still_counted():
+    s = Sim()
+    s.run(300, [1, 2], 0, 0)
+    s.run(400, [1, 2], 0, 1)  # gelas 1
+    s.run(500, [1, 2], 0, 0)  # gelas 1 diangkat
+    s.run(600, [1, 2], 0, 1)  # gelas 2 datang
+    assert s.w.per_table["T1"].session.glasses_served == 2
+
+
+def test_briefly_hidden_item_is_not_counted_twice():
+    s = Sim()
+    s.run(300, [1, 2], 0, 0)
+    s.run(400, [1, 2], 1, 0)
+    s.run(420, [1, 2], 0, 0)  # piring tertutup 20 detik
+    s.run(500, [1, 2], 1, 0)
+    assert s.w.per_table["T1"].session.plates_served == 1

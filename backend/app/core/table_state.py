@@ -10,7 +10,12 @@ Yang dihitung di sini (sekali, dipakai semua fitur):
 
 Event inti yang dikirim ke fitur:
   occupied  meja mulai terisi          (t = orang pertama terlihat)
-  emptied   meja menjadi kosong        (t = orang terakhir terlihat)
+  emptied   meja menjadi kosong        (t = orang menetap terakhir terlihat)
+
+Meja baru dianggap kosong kalau jumlah orang 0 DAN tidak ada track lain di zona,
+atau jumlah orang sudah 0 selama seated_min_s. Jadi saat tracker mengganti ID
+orang yang sama (tertutup waiter lalu muncul dengan ID baru), meja tetap terisi
+dan occupied_since tidak ter-reset.
   people    jumlah orang berubah
   plates    jumlah piring berubah      (t dimundurkan ke saat angka baru pertama muncul)
   glasses   jumlah gelas berubah
@@ -60,8 +65,10 @@ class TableState:
         self._plates = mk()
         self._glasses = mk()
         self.history: deque[tuple[float, int, int, int]] = deque()
+        self.occupied = False
         self.occupied_since: float | None = None
         self.empty_since: float | None = None
+        self._zero_since: float | None = None  # sejak kapan jumlah orang menetap = 0
         self.seat_flags: list[bool] = [False] * len(zone.chairs)
         self.raw = TableObs()
         self.last_t = 0.0
@@ -88,12 +95,12 @@ class TableState:
         return sum(self.seat_flags)
 
     def occupied_for_s(self, now: float | None = None) -> float:
-        if self.occupied_since is None or self.people == 0:
+        if self.occupied_since is None or not self.occupied:
             return 0.0
         return (now if now is not None else self.last_t) - self.occupied_since
 
     def empty_for_s(self, now: float | None = None) -> float:
-        if self.empty_since is None or self.people > 0:
+        if self.empty_since is None or self.occupied:
             return 0.0
         return (now if now is not None else self.last_t) - self.empty_since
 
@@ -114,16 +121,25 @@ class TableState:
         settled = self.dwell.settled()
 
         ch = self._people.update(t, len(settled))
+        if ch and ch.new == 0:
+            self._zero_since = ch.at
+
+        if not self.occupied and self.people > 0:
+            start = min(settled.values()) if settled else (ch.at if ch else t)
+            self.occupied = True
+            self.occupied_since = start
+            self.empty_since = None
+            events.append(CoreEvent("occupied", self.id, start, ch.old if ch else 0, self.people))
+        elif self.occupied and self.people == 0:
+            zero_for = t - (self._zero_since if self._zero_since is not None else t)
+            # Masih ada track (mis. ID baru dari orang yang sama) -> tunggu dulu sampai
+            # track itu menetap; kalau tidak menetap dalam seated_min_s, meja memang kosong.
+            if not self.dwell.tracks or zero_for >= self.rules.seated_min_s:
+                last = self.dwell.last_settled_seen
+                self.occupied = False
+                self.empty_since = min(last, t) if last is not None else (self._zero_since or t)
+                events.append(CoreEvent("emptied", self.id, self.empty_since, ch.old if ch else 0, 0))
         if ch:
-            if ch.old == 0 and ch.new > 0:
-                start = min(settled.values()) if settled else ch.at
-                self.occupied_since = start
-                self.empty_since = None
-                events.append(CoreEvent("occupied", self.id, start, ch.old, ch.new))
-            elif ch.new == 0:
-                last = self.dwell.last_seen_any
-                self.empty_since = min(last, t) if last is not None else ch.at
-                events.append(CoreEvent("emptied", self.id, self.empty_since, ch.old, ch.new))
             events.append(CoreEvent("people", self.id, ch.at, ch.old, ch.new))
 
         for name, counter, raw in (("plates", self._plates, obs.plates), ("glasses", self._glasses, obs.glasses)):
@@ -147,8 +163,8 @@ class TableState:
             "glasses": self.glasses,
             "seats_occupied": self.seats_occupied if self.zone.chairs else None,
             "seat_flags": self.seat_flags if self.zone.chairs else None,
-            "occupied_since": self.occupied_since if self.people else None,
+            "occupied_since": self.occupied_since if self.occupied else None,
             "occupied_s": round(self.occupied_for_s(), 1),
-            "empty_since": self.empty_since if not self.people else None,
+            "empty_since": self.empty_since if not self.occupied else None,
             "empty_s": round(self.empty_for_s(), 1),
         }

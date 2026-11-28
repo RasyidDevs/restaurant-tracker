@@ -100,3 +100,37 @@ def test_build_layout_assigns_chairs_to_nearest_table():
     layout = build_layout(tables, chairs)
     assert [t["seats"] for t in layout] == [2, 3]
     assert layout[0]["name"] == "Meja 1" and layout[0]["surface"][0] == [100, 100]
+
+
+def test_id_switch_keeps_table_occupied():
+    # Tracker memberi ID baru ke orang yang sama (tertutup waiter) -> meja tetap terisi.
+    s = Sim()
+    s.run(600, [1], 0, 0)
+    while s.t < 700:
+        s.run(s.t + 1, [2], 0, 0)
+        assert s.table.occupied
+    assert s.table.occupied_since == pytest.approx(0, abs=0.3)
+    assert s.table.occupied_for_s() == pytest.approx(700, abs=0.5)
+
+
+def test_unsettled_track_does_not_keep_table_occupied_forever():
+    # Setelah pelanggan pergi, ada orang lalu-lalang terus di zona: meja tetap jadi kosong.
+    s = Sim()
+    s.run(300, [1], 0, 0)
+    t = 300.0
+    pid = 1000
+    while t < 500:  # orang lewat bergantian, masing-masing 10 detik
+        s.run(t + 10, [pid], 0, 0)
+        t += 10
+        pid += 1
+    assert not s.table.occupied
+    assert s.table.empty_since == pytest.approx(300, abs=0.5)
+
+
+def test_redact_source_hides_credentials():
+    from app.core.sources import redact_source
+
+    assert redact_source("rtsp://admin:rahasia@10.0.0.5:554/stream") == "rtsp://***@10.0.0.5:554/stream"
+    assert redact_source("rtsp://10.0.0.5/stream") == "rtsp://10.0.0.5/stream"
+    assert redact_source("videos/demo.mp4") == "videos/demo.mp4"
+    assert redact_source(0) == "0"

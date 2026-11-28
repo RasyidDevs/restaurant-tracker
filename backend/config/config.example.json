@@ -29,7 +29,9 @@
       "require_drinks": true,
       "alert_no_item_min": 20,
       "alert_partial_min": 25,
-      "target_min": 20
+      "target_min": 20,
+      "new_group_gap_s": 30,
+      "item_reappear_s": 60
     }
   },
   "tables": [

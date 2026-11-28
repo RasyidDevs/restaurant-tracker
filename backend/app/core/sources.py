@@ -11,10 +11,26 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 
 def is_file_source(src: str | int) -> bool:
     return isinstance(src, str) and Path(src).exists()
+
+
+def redact_source(src: str | int) -> str:
+    """Sembunyikan user:password di URL kamera sebelum ditampilkan di dashboard/log.
+
+    rtsp://admin:rahasia@10.0.0.5:554/stream -> rtsp://***@10.0.0.5:554/stream
+    """
+    s = str(src)
+    try:
+        u = urlsplit(s)
+    except ValueError:
+        return s
+    if "@" not in u.netloc:
+        return s
+    return urlunsplit((u.scheme, "***@" + u.netloc.rsplit("@", 1)[1], u.path, u.query, u.fragment))
 
 
 def iter_frames(
@@ -28,7 +44,7 @@ def iter_frames(
 
     cap = cv2.VideoCapture(src)
     if not cap.isOpened():
-        raise RuntimeError(f"Tidak bisa membuka sumber video: {src}")
+        raise RuntimeError(f"Tidak bisa membuka sumber video: {redact_source(src)}")
 
     is_file = is_file_source(src)
     video_fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
